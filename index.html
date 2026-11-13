@@ -157,6 +157,16 @@
                 </div>
             </div>
 
+            <div class="setup-group">
+                <label class="setup-label">Preset Pack</label>
+                <div class="file-input-wrapper">
+                    <button class="file-btn" id="preset-photo-btn" onclick="togglePreset('photo')">Use Preset Photos</button>
+                </div>
+                <div class="file-input-wrapper" style="margin-top: 8px;">
+                    <button class="file-btn" id="preset-music-btn" onclick="togglePreset('music')">Use Preset Music</button>
+                </div>
+            </div>
+
             <button class="action-btn" onclick="finishSetupAndReveal()">Start Magic</button>
             <button class="action-btn" id="retry-cam-btn" onclick="retryCamera()" style="display:none; margin-top:14px; padding:10px 24px; font-size:12px; letter-spacing:2px; background:transparent; color:#d4af37; border:1px solid rgba(212,175,55,0.5); box-shadow:none;">Retry Camera</button>
         </div>
@@ -182,7 +192,65 @@
         let userPhotos = [];
         let userAudio = null;
         let isCameraReady = false;
-        let globalStream = null; 
+        let globalStream = null;
+
+        // --- PRESET PACK ---
+        const PRESET_PHOTOS = [
+            'pic/lQDPJwR-W9Lyb0XNAyrNBDiwEru8bOnZTEoKvZbtfu9JAA_1080_810.jpg',
+            'pic/lQDPJxD1xoPeFQXNA8DNBQCwnmRJ_2RfHY4KvZawjhHxAA_1280_960.jpg',
+            'pic/lQDPJxrrFvS5ToXNAyrNBDiwPHMKlEvKN44KvZZz65inAA_1080_810.jpg',
+            'pic/lQDPJyAzggmCwEXNAyrNBDiwiSotIrhXt-UKvZbuHxWPAA_1080_810.jpg',
+            'pic/lQDPJyDXN6OQfoXNAyrNBDiwq9NQy4R4TFQKvZZzSmWtAA_1080_810.jpg',
+            'pic/lQDPJyI61F822EXNBQDNA8CwiQoGp3H70hEKvZcqHXsKAA_960_1280.jpg',
+            'pic/lQDPKGK4WLjTcUXNCUDNDFSwM1yGkCypi8cKvZbu0RZhAA_3156_2368.jpg'
+        ];
+        const PRESET_MUSIC = 'miusc/Sraozy - Duvet (纯音版)_L.ogg';
+        let usePresetPhotos = false;
+        let usePresetMusic = false;
+        let presetPhotos = [];
+
+        function loadPresetPhotos() {
+            PRESET_PHOTOS.forEach(path => {
+                const img = new Image();
+                img.onload = () => {
+                    presetPhotos.push({ src: path, aspect: img.width / img.height });
+                };
+                img.src = encodeURI(path);
+            });
+        }
+
+        function resetPresetBtn(type) {
+            const btn = document.getElementById(type === 'photo' ? 'preset-photo-btn' : 'preset-music-btn');
+            btn.classList.remove('selected');
+            btn.innerText = type === 'photo' ? 'Use Preset Photos' : 'Use Preset Music';
+        }
+
+        function togglePreset(type) {
+            if (type === 'photo') {
+                usePresetPhotos = !usePresetPhotos;
+                const btn = document.getElementById('preset-photo-btn');
+                btn.classList.toggle('selected', usePresetPhotos);
+                btn.innerText = usePresetPhotos ? 'Preset Photos: ON' : 'Use Preset Photos';
+                if (usePresetPhotos) {
+                    if (presetPhotos.length === 0) loadPresetPhotos();
+                    userPhotos = [];
+                    const pb = document.getElementById('photo-btn');
+                    pb.classList.remove('selected');
+                    pb.innerText = 'Select Images';
+                }
+            } else {
+                usePresetMusic = !usePresetMusic;
+                const btn = document.getElementById('preset-music-btn');
+                btn.classList.toggle('selected', usePresetMusic);
+                btn.innerText = usePresetMusic ? 'Preset Music: ON' : 'Use Preset Music';
+                if (usePresetMusic) {
+                    userAudio = null;
+                    const mb = document.getElementById('music-btn');
+                    mb.classList.remove('selected');
+                    mb.innerText = 'Select Audio';
+                }
+            }
+        }
 
         // --- PHASE 1: PRELOAD ON LOAD ---
         window.onload = () => {
@@ -311,6 +379,8 @@
                 btn.classList.add('selected');
                 btn.innerText = `${input.files.length} File(s) Selected`;
                 if(btnId === 'photo-btn') {
+                    usePresetPhotos = false;
+                    resetPresetBtn('photo');
                     userPhotos = [];
                     Array.from(input.files).forEach(file => {
                         const reader = new FileReader();
@@ -327,6 +397,8 @@
                         reader.readAsDataURL(file);
                     });
                 } else if (btnId === 'music-btn') {
+                    usePresetMusic = false;
+                    resetPresetBtn('music');
                     userAudio = input.files[0];
                 }
             }
@@ -337,15 +409,21 @@
             const greeting = document.getElementById('greeting-input').value.trim() || "Merry Christmas";
             document.getElementById('main-title').innerText = greeting;
 
-            // 2. Inject Photos into Running Scene
-            if (userPhotos.length > 0 && window.addPhotosToRunningScene) {
-                window.addPhotosToRunningScene(userPhotos);
+            // 2. Inject Photos into Running Scene (own photos win; fall back to preset)
+            const photosToUse = userPhotos.length > 0 ? userPhotos : (usePresetPhotos ? presetPhotos : []);
+            if (photosToUse.length > 0 && window.addPhotosToRunningScene) {
+                window.addPhotosToRunningScene(photosToUse);
             }
 
-            // 3. Play Audio
+            // 3. Play Audio (own audio wins; fall back to preset)
             if(userAudio) {
                 const audioUrl = URL.createObjectURL(userAudio);
                 const audio = new Audio(audioUrl);
+                audio.loop = true;
+                audio.volume = 0.5;
+                audio.play().catch(e => console.log("Audio play failed:", e));
+            } else if (usePresetMusic) {
+                const audio = new Audio(encodeURI(PRESET_MUSIC));
                 audio.loop = true;
                 audio.volume = 0.5;
                 audio.play().catch(e => console.log("Audio play failed:", e));
